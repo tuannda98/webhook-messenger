@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login
 
 if (($_POST['action'] ?? '') === 'logout') {
     session_destroy();
-    header('Location: admin.php');
+    header('Location: admin');
     exit;
 }
 
@@ -188,10 +188,10 @@ tbody tr:hover td { background: #f7fafc; }
 <div class="sidebar">
     <div class="sidebar-brand">💬 <span>Chat</span>Admin</div>
     <nav class="sidebar-nav">
-        <a href="admin.php?page=dashboard" class="<?= $page === 'dashboard' ? 'active' : '' ?>">
+        <a href="admin?page=dashboard" class="<?= $page === 'dashboard' ? 'active' : '' ?>">
             <span class="icon">📊</span> Dashboard
         </a>
-        <a href="admin.php?page=config" class="<?= $page === 'config' ? 'active' : '' ?>">
+        <a href="admin?page=config" class="<?= $page === 'config' ? 'active' : '' ?>">
             <span class="icon">⚙️</span> Cấu hình
         </a>
     </nav>
