@@ -104,8 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $messenger->deletePersistentMenu();
                 $flash = 'Đã xoá Persistent Menu.';
             } else {
-                $messenger->setPersistentMenu($items);
-                $flash = 'Đã cập nhật Persistent Menu (' . count($items) . ' mục).';
+                $fbResponse = $messenger->setPersistentMenu($items);
+                $fbRaw      = htmlspecialchars(json_encode($fbResponse, JSON_UNESCAPED_UNICODE));
+                $flash      = 'FB response: <code>' . $fbRaw . '</code> · ' . count($items) . ' mục đã gửi.';
             }
         } catch (\Throwable $e) {
             $flash = '❌ Lỗi: ' . htmlspecialchars($e->getMessage());

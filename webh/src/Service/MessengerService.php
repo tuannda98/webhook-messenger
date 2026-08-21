@@ -404,8 +404,9 @@ class MessengerService
     /**
      * Cập nhật persistent menu.
      * $items: [['title' => '...', 'payload' => '...'], ...]  (tối đa 5 mục)
+     * Trả về raw response từ FB để caller có thể log/debug.
      */
-    public function setPersistentMenu(array $items): void
+    public function setPersistentMenu(array $items): array
     {
         $actions = array_map(fn($item) => [
             'type'    => 'postback',
@@ -414,7 +415,7 @@ class MessengerService
         ], $items);
 
         try {
-            $this->http->post("{$this->baseUrl}/me/messenger_profile", [
+            $response = $this->http->post("{$this->baseUrl}/me/messenger_profile", [
                 'query' => ['access_token' => Config::fbPageToken()],
                 'json'  => [
                     'persistent_menu' => [[
@@ -424,6 +425,7 @@ class MessengerService
                     ]],
                 ],
             ]);
+            return json_decode($response->getBody()->getContents(), true) ?? [];
         } catch (GuzzleException $e) {
             throw new MessengerApiException("Failed to set persistent menu: {$e->getMessage()}", 0, $e);
         }
