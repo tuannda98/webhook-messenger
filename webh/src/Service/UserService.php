@@ -63,6 +63,7 @@ class UserService
             $this->logger->warning('Failed to fetch FB profile', [
                 'psid'  => $psid,
                 'error' => $e->getMessage(),
+                'hint'  => 'Check app permissions: pages_messaging required; fields: name,first_name,last_name,picture',
             ]);
             $profile = [];
         }

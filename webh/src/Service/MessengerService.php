@@ -383,7 +383,7 @@ class MessengerService
 
     public function getUserProfile(
         string $userId,
-        array  $fields = ['name', 'first_name', 'last_name', 'profile_pic', 'locale', 'timezone', 'gender']
+        array  $fields = ['name', 'first_name', 'last_name', 'picture']
     ): array {
         try {
             $response = $this->http->get("{$this->baseUrl}/{$userId}", [
