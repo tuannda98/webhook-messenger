@@ -378,6 +378,73 @@ class MessengerService
     }
 
     // -------------------------------------------------------------------------
+    // Persistent Menu
+    // -------------------------------------------------------------------------
+
+    /**
+     * Lấy persistent menu hiện tại từ FB.
+     * Trả về mảng call_to_actions hoặc [] nếu chưa thiết lập.
+     */
+    public function getPersistentMenu(): array
+    {
+        try {
+            $response = $this->http->get("{$this->baseUrl}/me/messenger_profile", [
+                'query' => [
+                    'fields'       => 'persistent_menu',
+                    'access_token' => Config::fbPageToken(),
+                ],
+            ]);
+            $data = json_decode($response->getBody()->getContents(), true);
+            return $data['data'][0]['persistent_menu'][0]['call_to_actions'] ?? [];
+        } catch (GuzzleException) {
+            return [];
+        }
+    }
+
+    /**
+     * Cập nhật persistent menu.
+     * $items: [['title' => '...', 'payload' => '...'], ...]  (tối đa 5 mục)
+     */
+    public function setPersistentMenu(array $items): void
+    {
+        $actions = array_map(fn($item) => [
+            'type'    => 'postback',
+            'title'   => $item['title'],
+            'payload' => $item['payload'],
+        ], $items);
+
+        try {
+            $this->http->post("{$this->baseUrl}/me/messenger_profile", [
+                'query' => ['access_token' => Config::fbPageToken()],
+                'json'  => [
+                    'persistent_menu' => [[
+                        'locale'                  => 'default',
+                        'composer_input_disabled' => false,
+                        'call_to_actions'         => $actions,
+                    ]],
+                ],
+            ]);
+        } catch (GuzzleException $e) {
+            throw new MessengerApiException("Failed to set persistent menu: {$e->getMessage()}", 0, $e);
+        }
+    }
+
+    /**
+     * Xoá persistent menu.
+     */
+    public function deletePersistentMenu(): void
+    {
+        try {
+            $this->http->delete("{$this->baseUrl}/me/messenger_profile", [
+                'query' => ['access_token' => Config::fbPageToken()],
+                'json'  => ['fields' => ['persistent_menu']],
+            ]);
+        } catch (GuzzleException $e) {
+            throw new MessengerApiException("Failed to delete persistent menu: {$e->getMessage()}", 0, $e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // User profile
     // -------------------------------------------------------------------------
 

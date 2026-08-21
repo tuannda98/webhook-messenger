@@ -8,6 +8,7 @@ use App\Admin\AdminGuard;
 use App\Admin\StatsService;
 use App\Config\Config;
 use App\Service\Database;
+use App\Service\MessengerService;
 use App\Service\SystemConfig;
 use Dotenv\Dotenv;
 
@@ -60,6 +61,7 @@ if (empty($_SESSION['admin'])) {
 
 $sysConfig  = new SystemConfig($db);
 $stats      = new StatsService($db);
+$messenger  = new MessengerService();
 $page       = $_GET['page'] ?? 'dashboard';
 $flash      = '';
 
@@ -85,6 +87,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $page = 'config';
     }
+
+    if ($action === 'update_menu') {
+        $titles   = $_POST['menu_title']   ?? [];
+        $payloads = $_POST['menu_payload'] ?? [];
+        $items = [];
+        foreach ($titles as $i => $title) {
+            $title   = trim($title);
+            $payload = trim($payloads[$i] ?? '');
+            if ($title !== '' && $payload !== '') {
+                $items[] = ['title' => $title, 'payload' => $payload];
+            }
+        }
+        try {
+            if (empty($items)) {
+                $messenger->deletePersistentMenu();
+                $flash = 'Đã xoá Persistent Menu.';
+            } else {
+                $messenger->setPersistentMenu($items);
+                $flash = 'Đã cập nhật Persistent Menu (' . count($items) . ' mục).';
+            }
+        } catch (\Throwable $e) {
+            $flash = '❌ Lỗi: ' . htmlspecialchars($e->getMessage());
+        }
+        $page = 'menu';
+    }
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -94,6 +121,7 @@ $recentSess    = $page === 'dashboard' ? $stats->recentSessions(15)      : [];
 $chartData     = $page === 'dashboard' ? $stats->dailySessionsChart(14)  : [];
 $topUsers      = $page === 'dashboard' ? $stats->topUsers(10)            : [];
 $allConfig     = $page === 'config'    ? $db->query('SELECT `key`, `value`, updated_at FROM system_config ORDER BY `key`')->fetchAll() : [];
+$currentMenu   = $page === 'menu'      ? $messenger->getPersistentMenu() : [];
 
 ob_start();
 ?>
@@ -194,6 +222,9 @@ tbody tr:hover td { background: #f7fafc; }
         <a href="admin?page=config" class="<?= $page === 'config' ? 'active' : '' ?>">
             <span class="icon">⚙️</span> Cấu hình
         </a>
+        <a href="admin?page=menu" class="<?= $page === 'menu' ? 'active' : '' ?>">
+            <span class="icon">📋</span> Menu Messenger
+        </a>
     </nav>
     <div class="sidebar-footer">
         <form method="POST"><input type="hidden" name="action" value="logout">
@@ -204,7 +235,12 @@ tbody tr:hover td { background: #f7fafc; }
 
 <div class="main">
     <div class="topbar">
-        <div class="topbar-title"><?= $page === 'dashboard' ? 'Dashboard' : 'Cấu hình hệ thống' ?></div>
+        <div class="topbar-title"><?= match($page) {
+            'dashboard' => 'Dashboard',
+            'config'    => 'Cấu hình hệ thống',
+            'menu'      => 'Menu Messenger',
+            default     => 'Admin',
+        } ?></div>
         <div style="font-size:13px;color:var(--text-muted)"><?= date('d/m/Y H:i') ?></div>
     </div>
     <div class="content">
@@ -373,6 +409,64 @@ tbody tr:hover td { background: #f7fafc; }
                 </tbody>
             </table>
         </div>
+
+    <?php elseif ($page === 'menu'): ?>
+
+        <div class="section">
+            <div class="section-title">
+                Persistent Menu
+                <span style="font-size:12px;color:var(--text-muted)">Tối đa 5 mục · Để trống title/payload để xoá mục đó</span>
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">
+                Menu hiển thị cố định trong Messenger cho mọi người dùng.
+                Payload phải khớp với handler trong bot: <code>CMD_START</code>, <code>CMD_END</code>, <code>CMD_HELP</code>.
+            </p>
+            <form method="POST">
+                <input type="hidden" name="action" value="update_menu">
+                <?php
+                // Đảm bảo luôn hiển thị 5 slot
+                $menuSlots = array_pad($currentMenu, 5, ['title' => '', 'payload' => '']);
+                foreach ($menuSlots as $i => $item): ?>
+                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:center;margin-bottom:10px">
+                    <input type="text"
+                           name="menu_title[]"
+                           value="<?= htmlspecialchars($item['title'] ?? '') ?>"
+                           placeholder="Tiêu đề mục <?= $i + 1 ?>"
+                           style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;width:100%">
+                    <input type="text"
+                           name="menu_payload[]"
+                           value="<?= htmlspecialchars($item['payload'] ?? '') ?>"
+                           placeholder="Payload (vd: CMD_START)"
+                           style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;font-family:monospace;width:100%">
+                    <span style="font-size:12px;color:var(--text-muted);white-space:nowrap">Mục <?= $i + 1 ?></span>
+                </div>
+                <?php endforeach; ?>
+                <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+                    <button type="submit" class="btn btn-primary">📋 Cập nhật menu</button>
+                    <span style="font-size:12px;color:var(--text-muted)">
+                        <?= empty($currentMenu) ? 'Chưa có menu nào được thiết lập' : count($currentMenu) . ' mục đang hiển thị' ?>
+                    </span>
+                </div>
+            </form>
+        </div>
+
+        <?php if (!empty($currentMenu)): ?>
+        <div class="section">
+            <div class="section-title">Menu hiện tại trên FB</div>
+            <table>
+                <thead><tr><th>#</th><th>Tiêu đề</th><th>Payload</th></tr></thead>
+                <tbody>
+                <?php foreach ($currentMenu as $i => $item): ?>
+                <tr>
+                    <td style="color:var(--text-muted)"><?= $i + 1 ?></td>
+                    <td><?= htmlspecialchars($item['title'] ?? '') ?></td>
+                    <td style="font-family:monospace;font-size:12px"><?= htmlspecialchars($item['payload'] ?? '') ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
 
     <?php endif; ?>
 
