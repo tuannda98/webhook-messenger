@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Config\Config;
+use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 use Monolog\Logger;
@@ -18,10 +19,16 @@ class LoggerFactory
         $level  = Level::fromName(Config::string('LOG_LEVEL', 'debug'));
         $path   = Config::string('LOG_PATH', 'logs/app.log');
 
-        $logger->pushHandler(new StreamHandler($path, $level));
+        try {
+            $logger->pushHandler(new StreamHandler($path, $level));
+        } catch (\Throwable) {
+            $logger->pushHandler(new NullHandler());
+        }
 
         if (Config::bool('APP_DEBUG')) {
-            $logger->pushHandler(new StreamHandler('php://stdout', $level));
+            try {
+                $logger->pushHandler(new StreamHandler('php://stdout', $level));
+            } catch (\Throwable) {}
         }
 
         return $logger;
