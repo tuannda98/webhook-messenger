@@ -1,0 +1,1 @@
+{"version":2,"defects":{"Tests\\SignatureVerifierTest::testInvalidSignatureThrows":8,"Tests\\SignatureVerifierTest::testMissingPrefixThrows":8},"times":{"Tests\\SignatureVerifierTest::testValidSignature":0.001,"Tests\\SignatureVerifierTest::testInvalidSignatureThrows":0,"Tests\\SignatureVerifierTest::testMissingPrefixThrows":0}}
