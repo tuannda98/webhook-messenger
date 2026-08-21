@@ -4,47 +4,47 @@ declare(strict_types=1);
 
 namespace App\Handler\Event;
 
+use App\Service\ConversationService;
 use App\Service\MessengerService;
+use App\Service\UserService;
 use Psr\Log\LoggerInterface;
 
 class PostbackHandler
 {
     public function __construct(
         private readonly MessengerService $messenger,
+        private readonly ReplyAction $action,
+        private readonly ConversationService $conversation,
+        private readonly UserService $userService,
         private readonly LoggerInterface $logger,
     ) {}
 
-    public function handle(string $senderId, array $postback): void
+    public function handle(string $psid, array $postback): void
     {
         $payload = $postback['payload'] ?? '';
-        $this->logger->info('Postback received', ['sender' => $senderId, 'payload' => $payload]);
+        $this->logger->info('Postback received', ['psid' => $psid, 'payload' => $payload]);
+
+        ['user' => $user] = $this->userService->getOrCreate($psid);
 
         match ($payload) {
-            'GET_STARTED' => $this->onGetStarted($senderId),
-            'SERVICE_A'   => $this->messenger->sendText($senderId, "Bạn đã chọn Dịch vụ A. Chúng tôi sẽ liên hệ tư vấn chi tiết!"),
-            'SERVICE_B'   => $this->messenger->sendText($senderId, "Bạn đã chọn Dịch vụ B. Chúng tôi sẽ liên hệ tư vấn chi tiết!"),
-            'CONTACT'     => $this->onContact($senderId),
-            default       => $this->messenger->sendText($senderId, "Cảm ơn bạn! Chúng tôi sẽ hỗ trợ bạn sớm nhất."),
+            'GET_STARTED' => $this->onGetStarted($psid, $user),
+            'CMD_START'   => $this->onStart($psid, $user),
+            'CMD_END'     => $this->conversation->endChat($psid),
+            'CMD_HELP'    => $this->action->help($psid),
+            default       => $this->logger->info('Unhandled postback', ['payload' => $payload]),
         };
     }
 
-    private function onGetStarted(string $senderId): void
+    private function onGetStarted(string $psid, array $user): void
     {
-        $this->messenger->sendText(
-            $senderId,
-            "Chào mừng bạn! 🎉\n\nChúng tôi rất vui được phục vụ bạn. Hãy để lại tin nhắn và chúng tôi sẽ hỗ trợ bạn ngay!"
-        );
+        $this->action->welcome($psid, $user['first_name'] ?? '');
     }
 
-    private function onContact(string $senderId): void
+    private function onStart(string $psid, array $user): void
     {
-        $this->messenger->sendText(
-            $senderId,
-            "📞 Thông tin liên hệ:\n\n" .
-            "☎️ Hotline: 1900 xxxx\n" .
-            "📧 Email: contact@example.com\n" .
-            "🏢 Địa chỉ: 123 Đường ABC, TP.HCM\n\n" .
-            "Hoặc để lại tin nhắn, chúng tôi sẽ liên hệ lại!"
-        );
+        // fix #7: không còn duplicate state guard — đã nằm trong ConversationService
+        $this->messenger->markSeen($psid);
+        $this->messenger->typingOn($psid);
+        $this->conversation->startMatching($psid, $user['gender'] ?? 'unknown');
     }
 }

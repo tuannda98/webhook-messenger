@@ -7,24 +7,38 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use App\Config\Config;
 use App\Handler\Event\MessageHandler;
 use App\Handler\Event\PostbackHandler;
+use App\Handler\Event\ReplyAction;
 use App\Handler\WebhookHandler;
+use App\Service\ConversationService;
+use App\Service\Database;
 use App\Service\LoggerFactory;
+use App\Service\MatchService;
 use App\Service\MessengerService;
 use App\Service\SignatureVerifier;
+use App\Service\SystemConfig;
+use App\Service\UserService;
 use Dotenv\Dotenv;
 
 // Load environment
 $dotenv = Dotenv::createImmutable(dirname(__DIR__));
 $dotenv->load();
-$dotenv->required(['FB_APP_SECRET', 'FB_VERIFY_TOKEN', 'FB_PAGE_ACCESS_TOKEN']);
+$dotenv->required(['FB_APP_SECRET', 'FB_VERIFY_TOKEN', 'FB_PAGE_ACCESS_TOKEN', 'DB_DSN', 'DB_USER', 'DB_PASS']);
 
 // Wire up dependencies
-$logger    = LoggerFactory::create();
-$messenger = new MessengerService();
-$handler   = new WebhookHandler(
+$logger       = LoggerFactory::create();
+$messenger    = new MessengerService();
+$db           = Database::connection();
+
+$sysConfig    = new SystemConfig($db);
+$action       = new ReplyAction($messenger, $sysConfig);
+$match        = new MatchService($db, $sysConfig);
+$userService  = new UserService($db, $messenger, $logger);
+$conversation = new ConversationService($match, $action, $logger);
+
+$handler = new WebhookHandler(
     verifier:        new SignatureVerifier(),
-    messageHandler:  new MessageHandler($messenger, $logger),
-    postbackHandler: new PostbackHandler($messenger, $logger),
+    messageHandler:  new MessageHandler($messenger, $action, $conversation, $match, $userService, $logger),
+    postbackHandler: new PostbackHandler($messenger, $action, $conversation, $userService, $logger),
     logger:          $logger,
 );
 
@@ -40,7 +54,7 @@ if ($method === 'GET') {
 
 // POST: Incoming webhook events
 if ($method === 'POST') {
-    $rawBody  = file_get_contents('php://input');
+    $rawBody   = file_get_contents('php://input');
     $signature = $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
 
     $handler->handleWebhook($rawBody, $signature);
