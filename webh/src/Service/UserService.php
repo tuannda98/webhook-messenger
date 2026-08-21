@@ -52,7 +52,7 @@ class UserService
     {
         try {
             $profile = $this->messenger->getUserProfile($psid, [
-                'name', 'first_name', 'last_name', 'profile_pic',
+                'name', 'first_name', 'last_name', 'picture',
             ]);
         } catch (\Throwable $e) {
             $this->logger->warning('Failed to fetch FB profile', [
@@ -62,9 +62,9 @@ class UserService
             $profile = [];
         }
 
-        $name       = $profile['name']        ?? '';
-        $firstName  = $profile['first_name']  ?? '';
-        $profilePic = $profile['profile_pic'] ?? null;
+        $name       = $profile['name']                          ?? '';
+        $firstName  = $profile['first_name']                  ?? '';
+        $profilePic = $profile['picture']['data']['url']      ?? null;
         $gender     = $this->normalizeGender($profile['gender'] ?? '');
 
         $this->db->prepare(
