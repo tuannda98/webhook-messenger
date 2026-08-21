@@ -19,15 +19,20 @@ class UserService
      * Trả về ['user' => [...], 'is_new' => bool].
      * is_new = true khi user chưa từng tương tác (lần đầu tiên).
      */
-    public function getOrCreate(string $psid): array
+    public function getOrCreate(string $psid, int $refreshAfterDays = 7): array
     {
         $user = $this->find($psid);
 
-        if ($user !== null) {
-            return ['user' => $user, 'is_new' => false];
+        if ($user === null) {
+            return ['user' => $this->fetchAndSave($psid), 'is_new' => true];
         }
 
-        return ['user' => $this->fetchAndSave($psid), 'is_new' => true];
+        $stale = strtotime($user['updated_at']) < strtotime("-{$refreshAfterDays} days");
+        if ($stale) {
+            return ['user' => $this->fetchAndSave($psid), 'is_new' => false];
+        }
+
+        return ['user' => $user, 'is_new' => false];
     }
 
     public function find(string $psid): ?array
