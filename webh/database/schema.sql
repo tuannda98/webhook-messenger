@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS system_config (
     `key`       VARCHAR(100) NOT NULL PRIMARY KEY,
     `value`     TEXT         NOT NULL,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- Giá trị mặc định
 INSERT INTO system_config (`key`, `value`) VALUES
@@ -57,16 +57,16 @@ INSERT INTO system_config (`key`, `value`) VALUES
     ('match_by_gender',       '1'),
     ('exclude_recent_count',  '1'),
     -- Messages: dùng {name} làm placeholder cho tên user
-    ('welcome_message',       'Xin chào {name}! 👋\n\nChào mừng bạn đến với chat ngẫu nhiên.\nGõ /start để tìm người trò chuyện!'),
-    ('waiting_message',       'Đang tìm người chat cho bạn...\n\nGõ /end để huỷ tìm kiếm.'),
-    ('matched_message',       'Đã kết nối! Hãy bắt đầu trò chuyện.\n\nGõ /end để kết thúc.'),
-    ('disconnected_message',  'Bạn đã kết thúc cuộc trò chuyện.\n\nGõ /start để tìm người mới.'),
-    ('partner_left_message',  'Người kia đã rời cuộc trò chuyện.\n\nGõ /start để tìm người mới.'),
-    ('left_wait_room_message','Đã huỷ tìm kiếm.\n\nGõ /start để tìm người mới.'),
-    ('not_in_chat_message',   'Bạn chưa trong cuộc trò chuyện nào.'),
-    ('already_chatting_message', 'Bạn đang trong cuộc trò chuyện. Gõ /end trước.'),
-    ('already_waiting_message',  'Bạn đang chờ ghép cặp. Gõ /end để huỷ.'),
-    ('prompt_start_message',  'Gõ /start để tìm người chat ngẫu nhiên! 👋'),
+    ('welcome_message',       '👋 Xin chào {name}!\n\nChào mừng bạn đến với chat ngẫu nhiên.\nGõ /start để tìm người trò chuyện!'),
+    ('waiting_message',       '🔍 Đang tìm người chat cho bạn...\n\nGõ /end để huỷ tìm kiếm.'),
+    ('matched_message',       '🎉 Đã kết nối! Hãy bắt đầu trò chuyện.\n\nGõ /end để kết thúc.'),
+    ('disconnected_message',  '👋 Bạn đã kết thúc cuộc trò chuyện.\n\nGõ /start để tìm người mới.'),
+    ('partner_left_message',  '😢 Người kia đã rời cuộc trò chuyện.\n\nGõ /start để tìm người mới.'),
+    ('left_wait_room_message','✅ Đã huỷ tìm kiếm.\n\nGõ /start để tìm người mới.'),
+    ('not_in_chat_message',   '❌ Bạn chưa trong cuộc trò chuyện nào.'),
+    ('already_chatting_message', '⚠️ Bạn đang trong cuộc trò chuyện. Gõ /end trước.'),
+    ('already_waiting_message',  '⏳ Bạn đang chờ ghép cặp. Gõ /end để huỷ.'),
+    ('prompt_start_message',  '💬 Gõ /start để tìm người chat ngẫu nhiên!'),
     ('help_message',          '📖 Hướng dẫn:\n\n/start — Tìm người chat ngẫu nhiên\n/end   — Kết thúc / Huỷ tìm kiếm\n/help  — Xem hướng dẫn'),
     ('default_display_name',  'bạn')
 ON DUPLICATE KEY UPDATE `value` = VALUES(`value`);
