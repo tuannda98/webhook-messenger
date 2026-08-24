@@ -148,17 +148,21 @@ class InactivityService
     /** Chat rooms có ít nhất 1 user im >= END_MINUTES */
     private function findStaleChatRooms(): array
     {
+        // PDO MySQL không cho phép dùng cùng tên parameter nhiều lần — dùng tên riêng cho mỗi chỗ
         $stmt = $this->db->prepare(
             'SELECT cr.psid1, cr.psid2,
-                    (u1.last_messaged_at IS NOT NULL AND u1.last_messaged_at < NOW() - INTERVAL :mins MINUTE) AS p1_stale,
-                    (u2.last_messaged_at IS NOT NULL AND u2.last_messaged_at < NOW() - INTERVAL :mins MINUTE) AS p2_stale
+                    (u1.last_messaged_at IS NOT NULL AND u1.last_messaged_at < NOW() - INTERVAL :mins1 MINUTE) AS p1_stale,
+                    (u2.last_messaged_at IS NOT NULL AND u2.last_messaged_at < NOW() - INTERVAL :mins2 MINUTE) AS p2_stale
              FROM chat_room cr
              JOIN users u1 ON u1.psid = cr.psid1
              JOIN users u2 ON u2.psid = cr.psid2
-             WHERE (u1.last_messaged_at IS NOT NULL AND u1.last_messaged_at < NOW() - INTERVAL :mins MINUTE)
-                OR (u2.last_messaged_at IS NOT NULL AND u2.last_messaged_at < NOW() - INTERVAL :mins MINUTE)'
+             WHERE (u1.last_messaged_at IS NOT NULL AND u1.last_messaged_at < NOW() - INTERVAL :mins3 MINUTE)
+                OR (u2.last_messaged_at IS NOT NULL AND u2.last_messaged_at < NOW() - INTERVAL :mins4 MINUTE)'
         );
-        $stmt->bindValue(':mins', self::END_MINUTES, PDO::PARAM_INT);
+        $stmt->bindValue(':mins1', self::END_MINUTES, PDO::PARAM_INT);
+        $stmt->bindValue(':mins2', self::END_MINUTES, PDO::PARAM_INT);
+        $stmt->bindValue(':mins3', self::END_MINUTES, PDO::PARAM_INT);
+        $stmt->bindValue(':mins4', self::END_MINUTES, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
     }
