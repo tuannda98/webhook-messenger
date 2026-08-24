@@ -31,6 +31,7 @@ class MessageHandler
         }
 
         ['user' => $user, 'is_new' => $isNew] = $this->userService->getOrCreate($psid);
+        $this->userService->touchLastMessaged($psid);
 
         $command = $this->extractCommand($message);
         $state   = $this->match->getState($psid);

@@ -32,8 +32,11 @@ CREATE TABLE IF NOT EXISTS users (
     profile_pic TEXT,
     gender      ENUM('male', 'female', 'unknown') NOT NULL DEFAULT 'unknown',
     points      INT UNSIGNED NOT NULL DEFAULT 0,
-    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_messaged_at    DATETIME NULL,
+    session_warned_at   DATETIME NULL,
+    INDEX idx_last_messaged_at (last_messaged_at)
 );
 
 -- Theo dõi số lần đăng nhập admin thất bại (brute-force protection)

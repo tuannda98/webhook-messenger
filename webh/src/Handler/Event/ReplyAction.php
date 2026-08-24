@@ -120,6 +120,65 @@ class ReplyAction
     }
 
     // -------------------------------------------------------------------------
+    // Inactivity notifications
+    // -------------------------------------------------------------------------
+
+    public function inactivityWarning(string $psid): void
+    {
+        $this->messenger->sendText(
+            $psid,
+            $this->config->get(
+                'inactivity_warning_message',
+                "⚠️ Bạn không hoạt động gần 23 giờ.\n\nCuộc trò chuyện sẽ tự kết thúc sau 1 giờ nếu không có tin nhắn mới."
+            )
+        );
+    }
+
+    public function inactivityTerminated(string $psid): void
+    {
+        $this->messenger->sendText(
+            $psid,
+            $this->config->get(
+                'inactivity_terminated_message',
+                "⏰ Cuộc trò chuyện đã kết thúc do không hoạt động.\n\nGõ /start để tìm người mới."
+            )
+        );
+    }
+
+    public function partnerInactive(string $psid): void
+    {
+        $this->messenger->sendText(
+            $psid,
+            $this->config->get(
+                'partner_inactive_message',
+                "👤 Người kia không còn hoạt động. Cuộc trò chuyện đã kết thúc.\n\nGõ /start để tìm người mới."
+            )
+        );
+    }
+
+    public function waitRoomInactivityWarning(string $psid): void
+    {
+        $this->messenger->sendText(
+            $psid,
+            $this->config->get(
+                'wait_room_inactivity_warning_message',
+                "⚠️ Bạn không hoạt động gần 23 giờ.\n\nBạn sẽ bị xóa khỏi hàng chờ sau 1 giờ nếu không có tin nhắn mới."
+            )
+        );
+    }
+
+    public function waitRoomInactivityTerminated(string $psid): void
+    {
+        $this->messenger->sendText(
+            $psid,
+            $this->config->get(
+                'wait_room_inactivity_terminated_message',
+                "⏰ Đã xóa khỏi hàng chờ do không hoạt động.\n\nGõ /start để tìm người mới."
+            )
+        );
+    }
+
+    // -------------------------------------------------------------------------
     // Forward message between users
     // -------------------------------------------------------------------------
 

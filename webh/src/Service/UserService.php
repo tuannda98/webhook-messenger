@@ -44,6 +44,13 @@ class UserService
         return $row ?: null;
     }
 
+    public function touchLastMessaged(string $psid): void
+    {
+        $this->db->prepare(
+            'UPDATE users SET last_messaged_at = NOW(), session_warned_at = NULL WHERE psid = ?'
+        )->execute([$psid]);
+    }
+
     public function addPoints(string $psid, int $points): void
     {
         $this->db->prepare(
@@ -56,14 +63,12 @@ class UserService
     private function fetchAndSave(string $psid): array
     {
         try {
-            $profile = $this->messenger->getUserProfile($psid, [
-                'name', 'first_name', 'last_name', 'profile_pic',
-            ]);
+            $profile = $this->messenger->getUserProfile($psid, ['name']);
         } catch (\Throwable $e) {
             $this->logger->warning('Failed to fetch FB profile', [
                 'psid'  => $psid,
                 'error' => $e->getMessage(),
-                'hint'  => 'Check app permissions: pages_messaging required; fields: name,first_name,last_name,picture',
+                'hint'  => 'User may have blocked the page or the PSID does not belong to this page token.',
             ]);
             $profile = [];
         }

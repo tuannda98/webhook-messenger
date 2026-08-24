@@ -14,9 +14,18 @@ use GuzzleHttp\Exception\GuzzleException;
  *
  * Attachment types accepted by $type params: 'image' | 'audio' | 'video' | 'file'
  * messaging_type values: 'RESPONSE' | 'UPDATE' | 'MESSAGE_TAG'
+ *
+ * Message Tags (dùng kèm messaging_type=MESSAGE_TAG để gửi sau 24h):
+ *   TAG_CONFIRMED_EVENT_UPDATE — nhắc/cập nhật sự kiện user đã đăng ký
+ *   TAG_POST_PURCHASE_UPDATE   — cập nhật đơn hàng, vận chuyển, hoàn tiền
+ *   TAG_ACCOUNT_UPDATE         — thay đổi tài khoản, bảo mật, xác thực
  */
 class MessengerService
 {
+    public const TAG_CONFIRMED_EVENT_UPDATE = 'CONFIRMED_EVENT_UPDATE';
+    public const TAG_POST_PURCHASE_UPDATE   = 'POST_PURCHASE_UPDATE';
+    public const TAG_ACCOUNT_UPDATE         = 'ACCOUNT_UPDATE';
+
     private Client $http;
     private string $baseUrl;
 
@@ -52,6 +61,26 @@ class MessengerService
     public function sendText(string $recipientId, string $text, string $messagingType = 'RESPONSE'): array
     {
         return $this->sendMessage($recipientId, ['text' => $text], $messagingType);
+    }
+
+    /**
+     * Gửi text sau 24h bằng Message Tag.
+     * $tag: dùng các hằng TAG_* của class này.
+     */
+    public function sendTaggedText(string $recipientId, string $text, string $tag): array
+    {
+        return $this->sendMessage($recipientId, ['text' => $text], 'MESSAGE_TAG', $tag);
+    }
+
+    /**
+     * Gửi template sau 24h bằng Message Tag.
+     * $tag: dùng các hằng TAG_* của class này.
+     */
+    public function sendTaggedTemplate(string $recipientId, array $templatePayload, string $tag): array
+    {
+        return $this->sendMessage($recipientId, [
+            'attachment' => ['type' => 'template', 'payload' => $templatePayload],
+        ], 'MESSAGE_TAG', $tag);
     }
 
     // -------------------------------------------------------------------------
@@ -507,15 +536,22 @@ class MessengerService
     }
 
     private function sendMessage(
-        string $recipientId,
-        array  $message,
-        string $messagingType = 'RESPONSE'
+        string  $recipientId,
+        array   $message,
+        string  $messagingType = 'RESPONSE',
+        ?string $tag           = null
     ): array {
-        return $this->postGraphApi('me/messages', [
+        $body = [
             'recipient'      => ['id' => $recipientId],
             'message'        => $message,
             'messaging_type' => $messagingType,
-        ]);
+        ];
+
+        if ($tag !== null) {
+            $body['tag'] = $tag;
+        }
+
+        return $this->postGraphApi('me/messages', $body);
     }
 
     private function sendAction(string $recipientId, string $action): void
