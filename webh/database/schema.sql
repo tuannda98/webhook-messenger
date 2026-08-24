@@ -47,6 +47,15 @@ CREATE TABLE IF NOT EXISTS admin_login_attempts (
     last_attempt  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Bộ lọc từ ngữ (from_word → to_word)
+CREATE TABLE IF NOT EXISTS word_filters (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    from_word  VARCHAR(200) NOT NULL,
+    to_word    VARCHAR(200) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_from_word (from_word)
+);
+
 -- Cấu hình hệ thống (admin toggle)
 CREATE TABLE IF NOT EXISTS system_config (
     `key`       VARCHAR(100) NOT NULL PRIMARY KEY,

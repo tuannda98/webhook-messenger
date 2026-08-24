@@ -6,12 +6,14 @@ namespace App\Handler\Event;
 
 use App\Service\MessengerService;
 use App\Service\SystemConfig;
+use App\Service\WordFilterService;
 
 class ReplyAction
 {
     public function __construct(
         private readonly MessengerService $messenger,
         private readonly SystemConfig $config,
+        private readonly WordFilterService $wordFilter,
     ) {}
 
     // -------------------------------------------------------------------------
@@ -186,17 +188,32 @@ class ReplyAction
     {
         if (isset($message['attachments'])) {
             foreach ($message['attachments'] as $attachment) {
-                $url = $attachment['payload']['url'] ?? null;
+                $type = $attachment['type'] ?? '';
+                $url  = $attachment['payload']['url'] ?? null;
+
                 if ($url === null || $url === '') {
                     continue;
                 }
-                $this->messenger->sendAttachment($toPsid, $attachment['type'], $url);
+
+                $configKey = match ($type) {
+                    'image' => 'allow_attachment_image',
+                    'video' => 'allow_attachment_video',
+                    'audio' => 'allow_attachment_audio',
+                    'file'  => 'allow_attachment_file',
+                    default => null,
+                };
+
+                if ($configKey !== null && !$this->config->bool($configKey, true)) {
+                    continue;
+                }
+
+                $this->messenger->sendAttachment($toPsid, $type, $url);
             }
         }
 
         $text = $message['text'] ?? '';
         if ($text !== '') {
-            $this->messenger->sendText($toPsid, $text);
+            $this->messenger->sendText($toPsid, $this->wordFilter->apply($text));
         }
     }
 }

@@ -10,6 +10,7 @@ use App\Config\Config;
 use App\Service\Database;
 use App\Service\MessengerService;
 use App\Service\SystemConfig;
+use App\Service\WordFilterService;
 use Dotenv\Dotenv;
 
 $dotenv = Dotenv::createImmutable(dirname(__DIR__));
@@ -62,6 +63,7 @@ if (empty($_SESSION['admin'])) {
 $sysConfig  = new SystemConfig($db);
 $stats      = new StatsService($db);
 $messenger  = new MessengerService();
+$wordFilter = new WordFilterService($db);
 $page       = $_GET['page'] ?? 'dashboard';
 $flash      = '';
 
@@ -86,6 +88,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = "Đã thêm <strong>" . htmlspecialchars($key) . "</strong>.";
         }
         $page = 'config';
+    }
+
+    if ($action === 'update_guards') {
+        foreach (['allow_attachment_image','allow_attachment_video','allow_attachment_audio','allow_attachment_file'] as $key) {
+            $sysConfig->set($key, isset($_POST[$key]) ? '1' : '0');
+        }
+        $flash = 'Đã cập nhật Media Guards.';
+        $page  = 'filters';
+    }
+
+    if ($action === 'add_word_filter') {
+        $from = trim($_POST['from_word'] ?? '');
+        $to   = trim($_POST['to_word']   ?? '');
+        if ($from !== '') {
+            $wordFilter->add($from, $to);
+            $flash = 'Đã thêm quy tắc: <strong>' . htmlspecialchars($from) . '</strong> → <strong>' . htmlspecialchars($to) . '</strong>';
+        }
+        $page = 'filters';
+    }
+
+    if ($action === 'delete_word_filter') {
+        $id = (int)($_POST['filter_id'] ?? 0);
+        if ($id > 0) {
+            $wordFilter->delete($id);
+            $flash = 'Đã xoá quy tắc.';
+        }
+        $page = 'filters';
     }
 
     if ($action === 'update_menu') {
@@ -125,6 +154,7 @@ $allConfig     = $page === 'config'    ? $db->query('SELECT `key`, `value`, upda
 $currentMenu   = $page === 'menu'      ? $messenger->getPersistentMenu() : [];
 $waitRoomUsers = $page === 'live'      ? $stats->waitRoomUsers()         : [];
 $activePairs   = $page === 'live'      ? $stats->activeChatRooms()       : [];
+$wordRules     = $page === 'filters'   ? $wordFilter->all()               : [];
 
 ob_start();
 ?>
@@ -213,6 +243,23 @@ tbody tr:hover td { background: #f7fafc; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
 @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 
+/* Toggle switch */
+.toggle-row { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid var(--border); }
+.toggle-row:last-child { border-bottom:none; }
+.toggle-label { font-size:14px; font-weight:500; }
+.toggle-desc  { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.switch { position:relative; display:inline-block; width:44px; height:24px; }
+.switch input { opacity:0; width:0; height:0; }
+.slider { position:absolute; cursor:pointer; inset:0; background:#cbd5e0; border-radius:24px; transition:.2s; }
+.slider:before { position:absolute; content:''; height:18px; width:18px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s; }
+input:checked + .slider { background:var(--green); }
+input:checked + .slider:before { transform:translateX(20px); }
+
+/* Word filter */
+.filter-tag { display:inline-flex; align-items:center; gap:6px; background:#f1f5f9; border-radius:6px; padding:4px 10px; font-size:13px; }
+.filter-arrow { color:var(--primary); font-weight:700; }
+.filter-empty { font-size:13px; color:var(--text-muted); padding:8px 0; }
+
 /* Live page */
 .badge-red    { background: #fee2e2; color: #991b1b; }
 .badge-yellow { background: #fef3c7; color: #92400e; }
@@ -235,6 +282,9 @@ tbody tr:hover td { background: #f7fafc; }
         <a href="admin?page=config" class="<?= $page === 'config' ? 'active' : '' ?>">
             <span class="icon">⚙️</span> Cấu hình
         </a>
+        <a href="admin?page=filters" class="<?= $page === 'filters' ? 'active' : '' ?>">
+            <span class="icon">🛡️</span> Bộ lọc
+        </a>
         <a href="admin?page=live" class="<?= $page === 'live' ? 'active' : '' ?>">
             <span class="icon">🔴</span> Live
         </a>
@@ -254,6 +304,7 @@ tbody tr:hover td { background: #f7fafc; }
         <div class="topbar-title"><?= match($page) {
             'dashboard' => 'Dashboard',
             'live'      => 'Live — Hoạt động thực tế',
+            'filters'   => 'Bộ lọc nội dung',
             'config'    => 'Cấu hình hệ thống',
             'menu'      => 'Menu Messenger',
             default     => 'Admin',
@@ -266,7 +317,96 @@ tbody tr:hover td { background: #f7fafc; }
         <div class="flash"><?= $flash ?></div>
     <?php endif; ?>
 
-    <?php if ($page === 'live'): ?>
+    <?php if ($page === 'filters'): ?>
+
+        <!-- Media Guards -->
+        <div class="section" style="margin-bottom:28px">
+            <div class="section-title">Media Guards — Loại file được phép gửi</div>
+            <form method="POST">
+                <input type="hidden" name="action" value="update_guards">
+                <?php
+                $guards = [
+                    'allow_attachment_image' => ['🖼️ Ảnh',     'Cho phép gửi hình ảnh (image)'],
+                    'allow_attachment_video' => ['🎬 Video',    'Cho phép gửi video'],
+                    'allow_attachment_audio' => ['🎵 Âm thanh', 'Cho phép gửi audio/voice'],
+                    'allow_attachment_file'  => ['📎 File',     'Cho phép gửi file đính kèm'],
+                ];
+                foreach ($guards as $key => [$label, $desc]): ?>
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label"><?= $label ?></div>
+                        <div class="toggle-desc"><?= $desc ?></div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" name="<?= $key ?>" <?= $sysConfig->bool($key, true) ? 'checked' : '' ?>>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <?php endforeach; ?>
+                <div style="margin-top:16px">
+                    <button type="submit" class="btn btn-primary">💾 Lưu cài đặt</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Word Filters -->
+        <div class="section">
+            <div class="section-title">
+                Bộ lọc từ ngữ
+                <span style="font-size:12px;color:var(--text-muted)"><?= count($wordRules) ?> quy tắc</span>
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+                Thay thế từ A bằng từ B khi forward tin nhắn. Không phân biệt hoa thường. Để trống "Thay bằng" để xoá từ đó.
+            </p>
+
+            <!-- Add new rule -->
+            <form method="POST" style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:center;margin-bottom:20px">
+                <input type="hidden" name="action" value="add_word_filter">
+                <input type="text" name="from_word" placeholder="Từ cần lọc (vd: chó)" required
+                       style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;width:100%">
+                <input type="text" name="to_word" placeholder="Thay bằng (vd: cún)"
+                       style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;width:100%">
+                <button type="submit" class="btn btn-primary">➕ Thêm</button>
+            </form>
+
+            <!-- Rules table -->
+            <?php if (empty($wordRules)): ?>
+                <p class="filter-empty">Chưa có quy tắc nào.</p>
+            <?php else: ?>
+            <table>
+                <thead><tr><th>Từ gốc</th><th>Thay bằng</th><th>Thêm lúc</th><th></th></tr></thead>
+                <tbody>
+                <?php foreach ($wordRules as $rule): ?>
+                <tr>
+                    <td style="font-weight:500"><?= htmlspecialchars($rule['from_word']) ?></td>
+                    <td>
+                        <?php if ($rule['to_word'] !== ''): ?>
+                            <span class="filter-tag">
+                                <span class="filter-arrow">→</span>
+                                <?= htmlspecialchars($rule['to_word']) ?>
+                            </span>
+                        <?php else: ?>
+                            <span style="color:var(--red);font-size:12px">[xoá từ]</span>
+                        <?php endif; ?>
+                    </td>
+                    <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">
+                        <?= date('d/m/Y H:i', strtotime($rule['created_at'])) ?>
+                    </td>
+                    <td>
+                        <form method="POST" onsubmit="return confirm('Xoá quy tắc này?')">
+                            <input type="hidden" name="action" value="delete_word_filter">
+                            <input type="hidden" name="filter_id" value="<?= $rule['id'] ?>">
+                            <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#991b1b">🗑️</button>
+                        </form>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </div>
+
+    <?php elseif ($page === 'live'): ?>
 <?php
 function fmtDuration(int $sec): string {
     if ($sec < 60)   return $sec . 's';

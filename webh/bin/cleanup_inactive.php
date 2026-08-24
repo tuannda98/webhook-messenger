@@ -12,6 +12,7 @@ use App\Service\LoggerFactory;
 use App\Service\MatchService;
 use App\Service\MessengerService;
 use App\Service\SystemConfig;
+use App\Service\WordFilterService;
 use Dotenv\Dotenv;
 
 $dotenv = Dotenv::createImmutable(dirname(__DIR__));
@@ -20,9 +21,10 @@ $dotenv->required(['FB_APP_SECRET', 'FB_VERIFY_TOKEN', 'FB_PAGE_ACCESS_TOKEN', '
 
 $logger    = LoggerFactory::create();
 $db        = Database::connection();
-$sysConfig = new SystemConfig($db);
-$messenger = new MessengerService();
-$action    = new ReplyAction($messenger, $sysConfig);
+$sysConfig  = new SystemConfig($db);
+$wordFilter = new WordFilterService($db);
+$messenger  = new MessengerService();
+$action     = new ReplyAction($messenger, $sysConfig, $wordFilter);
 $match     = new MatchService($db, $sysConfig);
 
 $service = new InactivityService($db, $match, $action, $logger);

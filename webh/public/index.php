@@ -17,6 +17,7 @@ use App\Service\MessengerService;
 use App\Service\SignatureVerifier;
 use App\Service\SystemConfig;
 use App\Service\UserService;
+use App\Service\WordFilterService;
 use Dotenv\Dotenv;
 
 // Load environment
@@ -30,7 +31,8 @@ $messenger    = new MessengerService();
 $db           = Database::connection();
 
 $sysConfig    = new SystemConfig($db);
-$action       = new ReplyAction($messenger, $sysConfig);
+$wordFilter   = new WordFilterService($db);
+$action       = new ReplyAction($messenger, $sysConfig, $wordFilter);
 $match        = new MatchService($db, $sysConfig);
 $userService  = new UserService($db, $messenger, $logger);
 $conversation = new ConversationService($match, $action, $logger);
