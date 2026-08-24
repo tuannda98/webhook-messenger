@@ -123,6 +123,8 @@ $chartData     = $page === 'dashboard' ? $stats->dailySessionsChart(14)  : [];
 $topUsers      = $page === 'dashboard' ? $stats->topUsers(10)            : [];
 $allConfig     = $page === 'config'    ? $db->query('SELECT `key`, `value`, updated_at FROM system_config ORDER BY `key`')->fetchAll() : [];
 $currentMenu   = $page === 'menu'      ? $messenger->getPersistentMenu() : [];
+$waitRoomUsers = $page === 'live'      ? $stats->waitRoomUsers()         : [];
+$activePairs   = $page === 'live'      ? $stats->activeChatRooms()       : [];
 
 ob_start();
 ?>
@@ -210,6 +212,16 @@ tbody tr:hover td { background: #f7fafc; }
 /* Rows grid for 2 tables side by side */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
 @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+/* Live page */
+.badge-red    { background: #fee2e2; color: #991b1b; }
+.badge-yellow { background: #fef3c7; color: #92400e; }
+.live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--red); margin-right:6px; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.user-pair { display:flex; flex-direction:column; gap:4px; }
+.user-pair .u { display:flex; align-items:center; gap:8px; font-size:13px; }
+.user-pair .u-name { font-weight:500; min-width:100px; }
+.auto-refresh { font-size:12px; color:var(--text-muted); }
 </style>
 </head>
 <body>
@@ -222,6 +234,9 @@ tbody tr:hover td { background: #f7fafc; }
         </a>
         <a href="admin?page=config" class="<?= $page === 'config' ? 'active' : '' ?>">
             <span class="icon">⚙️</span> Cấu hình
+        </a>
+        <a href="admin?page=live" class="<?= $page === 'live' ? 'active' : '' ?>">
+            <span class="icon">🔴</span> Live
         </a>
         <a href="admin?page=menu" class="<?= $page === 'menu' ? 'active' : '' ?>">
             <span class="icon">📋</span> Menu Messenger
@@ -238,6 +253,7 @@ tbody tr:hover td { background: #f7fafc; }
     <div class="topbar">
         <div class="topbar-title"><?= match($page) {
             'dashboard' => 'Dashboard',
+            'live'      => 'Live — Hoạt động thực tế',
             'config'    => 'Cấu hình hệ thống',
             'menu'      => 'Menu Messenger',
             default     => 'Admin',
@@ -250,7 +266,100 @@ tbody tr:hover td { background: #f7fafc; }
         <div class="flash"><?= $flash ?></div>
     <?php endif; ?>
 
-    <?php if ($page === 'dashboard'): ?>
+    <?php if ($page === 'live'): ?>
+<?php
+function fmtDuration(int $sec): string {
+    if ($sec < 60)   return $sec . 's';
+    if ($sec < 3600) return floor($sec/60) . 'p ' . ($sec%60) . 's';
+    return floor($sec/3600) . 'h ' . floor(($sec%3600)/60) . 'p';
+}
+function idleBadge(?int $sec): string {
+    if ($sec === null) return '<span class="badge badge-gray">—</span>';
+    $warn = 22 * 60 + 55; // 22h55 in minutes → *60
+    $end  = 23 * 60 + 55;
+    $min  = floor($sec / 60);
+    if ($min >= $end)  return '<span class="badge badge-red">⚠️ ' . fmtDuration($sec) . '</span>';
+    if ($min >= $warn) return '<span class="badge badge-yellow">⏳ ' . fmtDuration($sec) . '</span>';
+    return '<span class="badge badge-green">' . fmtDuration($sec) . '</span>';
+}
+?>
+
+        <!-- Wait room -->
+        <div class="section" style="margin-bottom:28px">
+            <div class="section-title">
+                <span><span class="live-dot"></span>Đang chờ ghép (<?= count($waitRoomUsers) ?>)</span>
+                <span class="auto-refresh">Tự làm mới sau <span id="countdown">30</span>s</span>
+            </div>
+            <?php if (empty($waitRoomUsers)): ?>
+                <p style="color:var(--text-muted);font-size:14px">Không có ai trong hàng chờ.</p>
+            <?php else: ?>
+            <table>
+                <thead><tr>
+                    <th>Tên</th>
+                    <th>Giới tính</th>
+                    <th>Chờ</th>
+                    <th>Không hoạt động</th>
+                    <th>Vào lúc</th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($waitRoomUsers as $u): ?>
+                <tr>
+                    <td><?= htmlspecialchars($u['name'] ?: $u['psid']) ?></td>
+                    <td><?= match($u['gender']) { 'male'=>'👨 Nam','female'=>'👩 Nữ',default=>'❓' } ?></td>
+                    <td><?= fmtDuration((int)$u['waiting_sec']) ?></td>
+                    <td><?= idleBadge($u['idle_sec'] !== null ? (int)$u['idle_sec'] : null) ?></td>
+                    <td style="color:var(--text-muted);white-space:nowrap;font-size:12px">
+                        <?= date('d/m H:i', strtotime($u['created_at'])) ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </div>
+
+        <!-- Active pairs -->
+        <div class="section">
+            <div class="section-title">
+                <span><span class="live-dot"></span>Cặp đang chat (<?= count($activePairs) ?>)</span>
+            </div>
+            <?php if (empty($activePairs)): ?>
+                <p style="color:var(--text-muted);font-size:14px">Không có cặp nào đang chat.</p>
+            <?php else: ?>
+            <table>
+                <thead><tr>
+                    <th>User 1</th>
+                    <th>Idle 1</th>
+                    <th>User 2</th>
+                    <th>Idle 2</th>
+                    <th>Thời gian chat</th>
+                    <th>Ghép lúc</th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($activePairs as $r): ?>
+                <tr>
+                    <td><?= htmlspecialchars($r['name1'] ?: $r['psid1']) ?></td>
+                    <td><?= idleBadge($r['idle1_sec'] !== null ? (int)$r['idle1_sec'] : null) ?></td>
+                    <td><?= htmlspecialchars($r['name2'] ?: $r['psid2']) ?></td>
+                    <td><?= idleBadge($r['idle2_sec'] !== null ? (int)$r['idle2_sec'] : null) ?></td>
+                    <td><?= fmtDuration((int)$r['duration_sec']) ?></td>
+                    <td style="color:var(--text-muted);white-space:nowrap;font-size:12px">
+                        <?= date('d/m H:i', strtotime($r['created_at'])) ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </div>
+
+        <script>
+        let t = 30;
+        const el = document.getElementById('countdown');
+        setInterval(() => { t--; el.textContent = t; if (t <= 0) location.reload(); }, 1000);
+        </script>
+
+    <?php elseif ($page === 'dashboard'): ?>
 
         <!-- Overview cards -->
         <div class="cards">

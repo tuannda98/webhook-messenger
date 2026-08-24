@@ -75,6 +75,35 @@ class StatsService
         return $stmt->fetchAll();
     }
 
+    public function waitRoomUsers(): array
+    {
+        return $this->db->query(
+            'SELECT wr.psid, u.name, wr.gender, wr.created_at,
+                    u.last_messaged_at,
+                    TIMESTAMPDIFF(SECOND, wr.created_at, NOW())       AS waiting_sec,
+                    TIMESTAMPDIFF(SECOND, u.last_messaged_at, NOW())   AS idle_sec
+             FROM wait_room wr
+             LEFT JOIN users u ON u.psid = wr.psid
+             ORDER BY wr.created_at ASC'
+        )->fetchAll();
+    }
+
+    public function activeChatRooms(): array
+    {
+        return $this->db->query(
+            'SELECT cr.id, cr.created_at,
+                    TIMESTAMPDIFF(SECOND, cr.created_at, NOW()) AS duration_sec,
+                    cr.psid1, u1.name AS name1, u1.last_messaged_at AS lm1,
+                    TIMESTAMPDIFF(SECOND, u1.last_messaged_at, NOW()) AS idle1_sec,
+                    cr.psid2, u2.name AS name2, u2.last_messaged_at AS lm2,
+                    TIMESTAMPDIFF(SECOND, u2.last_messaged_at, NOW()) AS idle2_sec
+             FROM chat_room cr
+             LEFT JOIN users u1 ON u1.psid = cr.psid1
+             LEFT JOIN users u2 ON u2.psid = cr.psid2
+             ORDER BY cr.created_at DESC'
+        )->fetchAll();
+    }
+
     private function avgDuration(): float
     {
         $val = $this->scalar(
