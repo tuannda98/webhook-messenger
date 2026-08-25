@@ -27,7 +27,7 @@ $dotenv->required(['FB_APP_SECRET', 'FB_VERIFY_TOKEN', 'FB_PAGE_ACCESS_TOKEN', '
 
 // Wire up dependencies
 $logger       = LoggerFactory::create();
-$messenger    = new MessengerService();
+$messenger    = new MessengerService($logger);
 $db           = Database::connection();
 
 $sysConfig    = new SystemConfig($db);
@@ -39,8 +39,8 @@ $conversation = new ConversationService($match, $action, $logger);
 
 $handler = new WebhookHandler(
     verifier:        new SignatureVerifier(),
-    messageHandler:  new MessageHandler($messenger, $action, $conversation, $match, $userService, $logger),
-    postbackHandler: new PostbackHandler($messenger, $action, $conversation, $userService, $logger),
+    messageHandler:  new MessageHandler($action, $conversation, $match, $userService, $logger),
+    postbackHandler: new PostbackHandler($action, $conversation, $userService, $logger),
     logger:          $logger,
 );
 

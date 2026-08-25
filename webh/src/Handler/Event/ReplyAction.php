@@ -184,9 +184,15 @@ class ReplyAction
     // Forward message between users
     // -------------------------------------------------------------------------
 
+    // FB Send API limit: 10 calls/s per Page for audio/video; 300/s for the rest.
+    // When a user sends multiple attachments in one message, space them to stay well
+    // below the 10/s audio-video ceiling without slowing down text/image sends.
+    private const MEDIA_INTERVAL_US = 110_000; // ~9/s for audio/video
+
     public function forwardMessage(string $toPsid, array $message, ?string $fromPsid = null): void
     {
         if (isset($message['attachments'])) {
+            $needsThrottle = false;
             foreach ($message['attachments'] as $attachment) {
                 $rawType = $attachment['type'] ?? '';
                 $url     = $attachment['payload']['url'] ?? null;
@@ -205,7 +211,16 @@ class ReplyAction
                     continue;
                 }
 
+                // Throttle between audio/video attachments — 10 calls/s FB limit
+                if ($needsThrottle && in_array($rawType, ['audio', 'video'], true)) {
+                    usleep(self::MEDIA_INTERVAL_US);
+                }
+
                 $this->messenger->sendAttachment($toPsid, $rawType, $url);
+
+                if (in_array($rawType, ['audio', 'video'], true)) {
+                    $needsThrottle = true;
+                }
             }
         }
 

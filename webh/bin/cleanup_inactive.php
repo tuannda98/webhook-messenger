@@ -23,7 +23,7 @@ $logger    = LoggerFactory::create();
 $db        = Database::connection();
 $sysConfig  = new SystemConfig($db);
 $wordFilter = new WordFilterService($db);
-$messenger  = new MessengerService();
+$messenger  = new MessengerService($logger);
 $action     = new ReplyAction($messenger, $sysConfig, $wordFilter);
 $match     = new MatchService($db, $sysConfig);
 

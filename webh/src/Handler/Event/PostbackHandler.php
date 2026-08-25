@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace App\Handler\Event;
 
 use App\Service\ConversationService;
-use App\Service\MessengerService;
 use App\Service\UserService;
 use Psr\Log\LoggerInterface;
 
 class PostbackHandler
 {
     public function __construct(
-        private readonly MessengerService $messenger,
         private readonly ReplyAction $action,
         private readonly ConversationService $conversation,
         private readonly UserService $userService,
@@ -69,9 +67,6 @@ class PostbackHandler
 
     private function onStart(string $psid, array $user): void
     {
-        // fix #7: không còn duplicate state guard — đã nằm trong ConversationService
-        $this->messenger->markSeen($psid);
-        $this->messenger->typingOn($psid);
         $this->conversation->startMatching($psid, $user['gender'] ?? 'unknown');
     }
 }

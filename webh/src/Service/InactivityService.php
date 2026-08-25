@@ -15,6 +15,9 @@ class InactivityService
     // Ngưỡng kết thúc: user im >= 23h55
     private const END_MINUTES  = 23 * 60 + 55;
 
+    // Delay giữa các lần gửi thông báo trong batch — tránh spike rate limit
+    private const NOTIFY_INTERVAL_US = 100_000; // 100ms → tối đa ~10 user/giây
+
     public function __construct(
         private readonly PDO $db,
         private readonly MatchService $match,
@@ -44,6 +47,7 @@ class InactivityService
                     'error' => $e->getMessage(),
                 ]);
             }
+            usleep(self::NOTIFY_INTERVAL_US);
         }
 
         foreach ($this->findWarnWaitRoomUsers() as $row) {
@@ -57,6 +61,7 @@ class InactivityService
                     'error' => $e->getMessage(),
                 ]);
             }
+            usleep(self::NOTIFY_INTERVAL_US);
         }
     }
 
@@ -92,6 +97,7 @@ class InactivityService
                     'error' => $e->getMessage(),
                 ]);
             }
+            usleep(self::NOTIFY_INTERVAL_US);
         }
 
         foreach ($this->findWarnChatRoomUsers() as $row) {
@@ -105,6 +111,7 @@ class InactivityService
                     'error' => $e->getMessage(),
                 ]);
             }
+            usleep(self::NOTIFY_INTERVAL_US);
         }
     }
 

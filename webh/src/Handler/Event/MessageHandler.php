@@ -6,7 +6,6 @@ namespace App\Handler\Event;
 
 use App\Service\ConversationService;
 use App\Service\MatchService;
-use App\Service\MessengerService;
 use App\Service\UserService;
 use App\Service\UserState;
 use Psr\Log\LoggerInterface;
@@ -16,7 +15,6 @@ class MessageHandler
     private const COMMANDS = ['/start', '/end', '/help'];
 
     public function __construct(
-        private readonly MessengerService $messenger,
         private readonly ReplyAction $action,
         private readonly ConversationService $conversation,
         private readonly MatchService $match,
@@ -65,8 +63,6 @@ class MessageHandler
 
     private function onStart(string $psid, array $user): void
     {
-        $this->messenger->markSeen($psid);
-        $this->messenger->typingOn($psid);
         $this->conversation->startMatching($psid, $user['gender'] ?? 'unknown');
     }
 
@@ -81,7 +77,6 @@ class MessageHandler
 
     private function onChatMessage(string $psid, array $message): void
     {
-        $this->messenger->markSeen($psid);
         $this->conversation->forwardMessage($psid, $message);
     }
 

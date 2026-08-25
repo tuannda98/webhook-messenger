@@ -8,6 +8,9 @@ use App\Config\Config;
 use App\Exception\MessengerApiException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * Wraps the Facebook Messenger Send API.
@@ -26,10 +29,18 @@ class MessengerService
     public const TAG_POST_PURCHASE_UPDATE   = 'POST_PURCHASE_UPDATE';
     public const TAG_ACCOUNT_UPDATE         = 'ACCOUNT_UPDATE';
 
+    // FB error codes that indicate rate limiting — warrant retry with backoff
+    private const RATE_LIMIT_CODES = [4, 17, 32, 80006, 613];
+    private const MAX_RETRIES      = 3;
+    private const RETRY_BASE_MS    = 5_000; // doubles each attempt: 5s → 10s → 20s
+
+    // Log a warning when this percentage of quota is consumed
+    private const RATE_LIMIT_WARN_PCT = 80;
+
     private Client $http;
     private string $baseUrl;
 
-    public function __construct()
+    public function __construct(private readonly LoggerInterface $logger)
     {
         $this->http    = new Client(['timeout' => 30]);
         $this->baseUrl = sprintf('%s/%s', rtrim(Config::fbApiUrl(), '/'), Config::fbApiVersion());
@@ -368,7 +379,7 @@ class MessengerService
 
             return json_decode($response->getBody()->getContents(), true);
         } catch (GuzzleException $e) {
-            throw new MessengerApiException("Failed to upload attachment: {$e->getMessage()}", 0, $e);
+            throw new MessengerApiException("Failed to upload attachment: {$e->getMessage()}", null, $e);
         }
     }
 
@@ -456,7 +467,7 @@ class MessengerService
             ]);
             return json_decode($response->getBody()->getContents(), true) ?? [];
         } catch (GuzzleException $e) {
-            throw new MessengerApiException("Failed to set persistent menu: {$e->getMessage()}", 0, $e);
+            throw new MessengerApiException("Failed to set persistent menu: {$e->getMessage()}", null, $e);
         }
     }
 
@@ -471,7 +482,7 @@ class MessengerService
                 'json'  => ['fields' => ['persistent_menu']],
             ]);
         } catch (GuzzleException $e) {
-            throw new MessengerApiException("Failed to delete persistent menu: {$e->getMessage()}", 0, $e);
+            throw new MessengerApiException("Failed to delete persistent menu: {$e->getMessage()}", null, $e);
         }
     }
 
@@ -493,7 +504,7 @@ class MessengerService
 
             return json_decode($response->getBody()->getContents(), true);
         } catch (GuzzleException $e) {
-            throw new MessengerApiException("Failed to get user profile: {$e->getMessage()}", 0, $e);
+            throw new MessengerApiException("Failed to get user profile: {$e->getMessage()}", null, $e);
         }
     }
 
@@ -554,25 +565,119 @@ class MessengerService
         return $this->postGraphApi('me/messages', $body);
     }
 
+    // Sender actions (mark_seen, typing_on/off) are pure UX — a failure must never
+    // block message delivery. We log a warning and move on instead of throwing.
     private function sendAction(string $recipientId, string $action): void
     {
-        $this->postGraphApi('me/messages', [
-            'recipient'     => ['id' => $recipientId],
-            'sender_action' => $action,
-        ]);
+        try {
+            $this->postGraphApi('me/messages', [
+                'recipient'     => ['id' => $recipientId],
+                'sender_action' => $action,
+            ]);
+        } catch (MessengerApiException $e) {
+            $this->logger->warning('Sender action failed — continuing', [
+                'action'    => $action,
+                'recipient' => $recipientId,
+                'fb_code'   => $e->getFbCode(),
+                'error'     => $e->getMessage(),
+            ]);
+        }
     }
+
+    // -------------------------------------------------------------------------
+    // Graph API transport — POST with retry + rate-limit header inspection
+    // -------------------------------------------------------------------------
 
     private function postGraphApi(string $endpoint, array $body): array
     {
-        try {
-            $response = $this->http->post("{$this->baseUrl}/{$endpoint}", [
-                'query' => ['access_token' => Config::fbPageToken()],
-                'json'  => $body,
-            ]);
+        $url  = "{$this->baseUrl}/{$endpoint}";
+        $opts = ['query' => ['access_token' => Config::fbPageToken()], 'json' => $body];
 
-            return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new MessengerApiException("Messenger API error [{$endpoint}]: {$e->getMessage()}", 0, $e);
+        for ($attempt = 0; $attempt <= self::MAX_RETRIES; $attempt++) {
+            try {
+                $response = $this->http->post($url, $opts);
+                $this->inspectRateLimitHeaders($response, $endpoint);
+                return json_decode($response->getBody()->getContents(), true);
+            } catch (RequestException $e) {
+                $fbCode = $this->extractFbErrorCode($e);
+                if ($fbCode !== null
+                    && in_array($fbCode, self::RATE_LIMIT_CODES, true)
+                    && $attempt < self::MAX_RETRIES
+                ) {
+                    $waitMs = self::RETRY_BASE_MS * (2 ** $attempt);
+                    $this->logger->warning('FB rate limit — retrying', [
+                        'endpoint' => $endpoint,
+                        'fb_code'  => $fbCode,
+                        'attempt'  => $attempt + 1,
+                        'wait_ms'  => $waitMs,
+                    ]);
+                    usleep($waitMs * 1_000);
+                    continue;
+                }
+                throw new MessengerApiException("Messenger API error [{$endpoint}]: {$e->getMessage()}", $fbCode, $e);
+            } catch (GuzzleException $e) {
+                throw new MessengerApiException("Messenger API error [{$endpoint}]: {$e->getMessage()}", null, $e);
+            }
         }
+
+        // Unreachable — loop always throws or returns, but satisfies static analysis
+        throw new MessengerApiException("Messenger API error [{$endpoint}]: max retries exceeded");
+    }
+
+    // -------------------------------------------------------------------------
+    // Rate-limit header inspection
+    // -------------------------------------------------------------------------
+
+    private function inspectRateLimitHeaders(ResponseInterface $response, string $endpoint): void
+    {
+        $buc = $response->getHeaderLine('X-Business-Use-Case-Usage');
+        if ($buc !== '') {
+            $data = json_decode($buc, true) ?? [];
+            foreach ($data as $objectId => $usages) {
+                foreach ((array) $usages as $usage) {
+                    $pct = (int) ($usage['call_count'] ?? 0);
+                    if ($pct >= self::RATE_LIMIT_WARN_PCT) {
+                        $this->logger->warning('FB BUC rate limit approaching', [
+                            'endpoint'  => $endpoint,
+                            'object_id' => $objectId,
+                            'type'      => $usage['type'] ?? '?',
+                            'call_count_pct' => $pct,
+                            'eta_minutes'    => $usage['estimated_time_to_regain_access'] ?? 0,
+                        ]);
+                    }
+                }
+            }
+        }
+
+        $app = $response->getHeaderLine('X-App-Usage');
+        if ($app !== '') {
+            $usage = json_decode($app, true) ?? [];
+            $pct   = (int) ($usage['call_count'] ?? 0);
+            if ($pct >= self::RATE_LIMIT_WARN_PCT) {
+                $this->logger->warning('FB App rate limit approaching', [
+                    'endpoint'       => $endpoint,
+                    'call_count_pct' => $pct,
+                    'total_time_pct' => $usage['total_time'] ?? 0,
+                    'total_cpu_pct'  => $usage['total_cputime'] ?? 0,
+                ]);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Extract FB error code from a failed Guzzle response
+    // -------------------------------------------------------------------------
+
+    private function extractFbErrorCode(RequestException $e): ?int
+    {
+        $response = $e->getResponse();
+        if ($response === null) {
+            return null;
+        }
+
+        $body = json_decode((string) $response->getBody(), true);
+        $code = $body['error']['code'] ?? null;
+
+        return is_int($code) ? $code : null;
     }
 }
