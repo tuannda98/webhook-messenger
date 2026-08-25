@@ -90,6 +90,6 @@ class ConversationService
             return;
         }
 
-        $this->action->forwardMessage($partner, $message);
+        $this->action->forwardMessage($partner, $message, $psid);
     }
 }

@@ -184,7 +184,7 @@ class ReplyAction
     // Forward message between users
     // -------------------------------------------------------------------------
 
-    public function forwardMessage(string $toPsid, array $message): void
+    public function forwardMessage(string $toPsid, array $message, ?string $fromPsid = null): void
     {
         if (isset($message['attachments'])) {
             foreach ($message['attachments'] as $attachment) {
@@ -204,6 +204,9 @@ class ReplyAction
                 };
 
                 if ($configKey !== null && !$this->config->bool($configKey, true)) {
+                    if ($fromPsid !== null) {
+                        $this->mediaBlocked($fromPsid, $type);
+                    }
                     continue;
                 }
 
@@ -215,5 +218,24 @@ class ReplyAction
         if ($text !== '') {
             $this->messenger->sendText($toPsid, $this->wordFilter->apply($text));
         }
+    }
+
+    private function mediaBlocked(string $psid, string $type): void
+    {
+        $label = match ($type) {
+            'image' => 'ảnh',
+            'video' => 'video',
+            'audio' => 'âm thanh',
+            'file'  => 'file',
+            default => 'nội dung này',
+        };
+
+        $this->messenger->sendText(
+            $psid,
+            $this->config->get(
+                "media_blocked_{$type}_message",
+                "⚠️ Không thể gửi {$label} trong cuộc trò chuyện này."
+            )
+        );
     }
 }
