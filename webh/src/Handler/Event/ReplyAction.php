@@ -188,29 +188,24 @@ class ReplyAction
     {
         if (isset($message['attachments'])) {
             foreach ($message['attachments'] as $attachment) {
-                $type = $attachment['type'] ?? '';
-                $url  = $attachment['payload']['url'] ?? null;
+                $rawType = $attachment['type'] ?? '';
+                $url     = $attachment['payload']['url'] ?? null;
 
                 if ($url === null || $url === '') {
                     continue;
                 }
 
-                $configKey = match ($type) {
-                    'image' => 'allow_attachment_image',
-                    'video' => 'allow_attachment_video',
-                    'audio' => 'allow_attachment_audio',
-                    'file'  => 'allow_attachment_file',
-                    default => null,
-                };
+                $subtype   = $this->detectSubtype($rawType, $attachment, $message);
+                $configKey = $this->guardKey($subtype);
 
                 if ($configKey !== null && !$this->config->bool($configKey, true)) {
                     if ($fromPsid !== null) {
-                        $this->mediaBlocked($fromPsid, $type);
+                        $this->mediaBlocked($fromPsid, $subtype);
                     }
                     continue;
                 }
 
-                $this->messenger->sendAttachment($toPsid, $type, $url);
+                $this->messenger->sendAttachment($toPsid, $rawType, $url);
             }
         }
 
@@ -220,20 +215,62 @@ class ReplyAction
         }
     }
 
-    private function mediaBlocked(string $psid, string $type): void
+    /**
+     * Phân loại chi tiết attachment:
+     *   sticker — nhãn dán FB (sticker_id có mặt)
+     *   gif     — ảnh động GIF (URL .gif hoặc từ giphy/tenor)
+     *   image   — ảnh do user upload
+     *   video / audio / file — theo type gốc
+     */
+    private function detectSubtype(string $rawType, array $attachment, array $message): string
     {
-        $label = match ($type) {
-            'image' => 'ảnh',
-            'video' => 'video',
-            'audio' => 'âm thanh',
-            'file'  => 'file',
-            default => 'nội dung này',
+        if ($rawType === 'image') {
+            if (isset($attachment['payload']['sticker_id']) || isset($message['sticker_id'])) {
+                return 'sticker';
+            }
+
+            $path = strtolower(parse_url($attachment['payload']['url'] ?? '', PHP_URL_PATH) ?? '');
+            $host = strtolower(parse_url($attachment['payload']['url'] ?? '', PHP_URL_HOST) ?? '');
+
+            if (str_ends_with($path, '.gif') || str_contains($host, 'giphy') || str_contains($host, 'tenor')) {
+                return 'gif';
+            }
+
+            return 'image';
+        }
+
+        return $rawType;
+    }
+
+    private function guardKey(string $subtype): ?string
+    {
+        return match ($subtype) {
+            'image'   => 'allow_attachment_image',
+            'gif'     => 'allow_attachment_gif',
+            'sticker' => 'allow_attachment_sticker',
+            'video'   => 'allow_attachment_video',
+            'audio'   => 'allow_attachment_audio',
+            'file'    => 'allow_attachment_file',
+            default   => null,
+        };
+    }
+
+    private function mediaBlocked(string $psid, string $subtype): void
+    {
+        $label = match ($subtype) {
+            'image'   => 'ảnh',
+            'gif'     => 'GIF',
+            'sticker' => 'nhãn dán',
+            'video'   => 'video',
+            'audio'   => 'âm thanh',
+            'file'    => 'file',
+            default   => 'nội dung này',
         };
 
         $this->messenger->sendText(
             $psid,
             $this->config->get(
-                "media_blocked_{$type}_message",
+                "media_blocked_{$subtype}_message",
                 "⚠️ Không thể gửi {$label} trong cuộc trò chuyện này."
             )
         );

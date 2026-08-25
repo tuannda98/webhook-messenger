@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'update_guards') {
-        foreach (['allow_attachment_image','allow_attachment_video','allow_attachment_audio','allow_attachment_file'] as $key) {
+        foreach (['allow_attachment_image','allow_attachment_gif','allow_attachment_sticker','allow_attachment_video','allow_attachment_audio','allow_attachment_file'] as $key) {
             $sysConfig->set($key, isset($_POST[$key]) ? '1' : '0');
         }
         $flash = 'Đã cập nhật Media Guards.';
@@ -326,10 +326,12 @@ input:checked + .slider:before { transform:translateX(20px); }
                 <input type="hidden" name="action" value="update_guards">
                 <?php
                 $guards = [
-                    'allow_attachment_image' => ['🖼️ Ảnh',     'Cho phép gửi hình ảnh (image)'],
-                    'allow_attachment_video' => ['🎬 Video',    'Cho phép gửi video'],
-                    'allow_attachment_audio' => ['🎵 Âm thanh', 'Cho phép gửi audio/voice'],
-                    'allow_attachment_file'  => ['📎 File',     'Cho phép gửi file đính kèm'],
+                    'allow_attachment_image'   => ['🖼️ Ảnh',        'Ảnh do user upload (JPEG, PNG, ...)'],
+                    'allow_attachment_gif'     => ['🎞️ GIF',         'Ảnh động GIF từ thư viện hoặc gửi file'],
+                    'allow_attachment_sticker' => ['🏷️ Nhãn dán',    'Sticker & avatar mặc định của Facebook'],
+                    'allow_attachment_video'   => ['🎬 Video',        'Cho phép gửi video'],
+                    'allow_attachment_audio'   => ['🎵 Âm thanh',    'Cho phép gửi audio/voice'],
+                    'allow_attachment_file'    => ['📎 File',         'Cho phép gửi file đính kèm'],
                 ];
                 foreach ($guards as $key => [$label, $desc]): ?>
                 <div class="toggle-row">
