@@ -629,6 +629,13 @@ function idleBadge(?int $sec): string {
             <form id="cfg-add" method="POST">
                 <input type="hidden" name="action" value="add_config">
             </form>
+            <?php
+                // Keys managed by dedicated UI elsewhere — hide from the raw config table
+                $managedKeys = [
+                    'allow_attachment_image', 'allow_attachment_gif', 'allow_attachment_sticker',
+                    'allow_attachment_video', 'allow_attachment_audio', 'allow_attachment_file',
+                ];
+            ?>
             <table>
                 <thead><tr>
                     <th style="width:220px">Key</th>
@@ -638,6 +645,7 @@ function idleBadge(?int $sec): string {
                 </tr></thead>
                 <tbody>
                 <?php foreach ($allConfig as $row):
+                    if (in_array($row['key'], $managedKeys, true)) continue;
                     $fid = 'cfg-' . md5($row['key']); ?>
                 <tr>
                     <td style="font-family:monospace;font-size:13px"><?= htmlspecialchars($row['key']) ?></td>
