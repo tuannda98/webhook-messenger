@@ -8,6 +8,7 @@ use App\Admin\AdminGuard;
 use App\Admin\StatsService;
 use App\Config\Config;
 use App\Service\Database;
+use App\Service\LoggerFactory;
 use App\Service\MessengerService;
 use App\Service\SystemConfig;
 use App\Service\WordFilterService;
@@ -62,7 +63,8 @@ if (empty($_SESSION['admin'])) {
 
 $sysConfig  = new SystemConfig($db);
 $stats      = new StatsService($db);
-$messenger  = new MessengerService();
+$logger     = LoggerFactory::create();
+$messenger  = new MessengerService($logger);
 $wordFilter = new WordFilterService($db);
 $page       = $_GET['page'] ?? 'dashboard';
 $flash      = '';
